@@ -20,6 +20,7 @@ class ScanHistory(Base):
     price: Mapped[float | None] = mapped_column(Numeric(10, 2))
     price_source: Mapped[str | None] = mapped_column(String(20))
     is_impulse: Mapped[bool | None] = mapped_column(Boolean)
+    is_duplicate: Mapped[bool | None] = mapped_column(Boolean, default=False)
     confidence: Mapped[float | None] = mapped_column(Numeric(3, 2))
     coach_message: Mapped[str | None] = mapped_column(Text)
     action_taken: Mapped[str | None] = mapped_column(String(20))

@@ -8,6 +8,8 @@ from app.schemas.scan import ScanRequest, ScanResponse
 from app.services.gemini_service import analyze_image
 from app.services.serp_service import find_alternatives
 from app.services.investment_service import calculate_projections
+from app.services.scan_service import check_recent_purchase
+from datetime import datetime, timezone
 
 router = APIRouter()
 
@@ -45,13 +47,27 @@ async def analyze(
     # Step 2/3 — branch on impulse vs necessity
     investment_projections = []
     alternatives = []
+    
+    is_duplicate = False
+    last_bought_days_ago = None
+    duplicate_warning = None
 
     if is_impulse:
         # Calculate what the money could become
         investment_projections = calculate_projections(price)
     else:
-        # Find the same item cheaper online
+        # Check for recent purchases if necessity
         item_name = gemini_result.get("item_name", "")
+        if item_name:
+            recent_purchase = await check_recent_purchase(db, current_user.id, item_name, days=14)
+            if recent_purchase:
+                is_duplicate = True
+                delta = datetime.now(timezone.utc) - recent_purchase.scanned_at
+                last_bought_days_ago = delta.days
+                
+                duplicate_warning = f"You bought {item_name} {last_bought_days_ago} days ago. Do you really need more? If yes, here's the best price."
+
+        # Find the same item cheaper online
         if item_name and price > 0:
             alternatives = await find_alternatives(item_name, price)
 
@@ -63,6 +79,7 @@ async def analyze(
         price=price,
         price_source=gemini_result.get("price_source"),
         is_impulse=is_impulse,
+        is_duplicate=is_duplicate,
         confidence=gemini_result.get("confidence"),
         coach_message=gemini_result.get("coach_message"),
         gemini_response=gemini_result,
@@ -84,4 +101,7 @@ async def analyze(
         real_life_equivalents=gemini_result.get("real_life_equivalents", []),
         investment_projections=investment_projections,
         alternatives=alternatives,
+        is_duplicate=is_duplicate,
+        last_bought_days_ago=last_bought_days_ago,
+        duplicate_warning=duplicate_warning,
     )

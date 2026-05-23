@@ -1,12 +1,10 @@
-import google.generativeai as genai
+from google import genai
 import base64
 import json
-from PIL import Image
-import io
 from app.core.config import settings
 
-genai.configure(api_key=settings.GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-1.5-flash")
+client = genai.Client(api_key=settings.GEMINI_API_KEY)
+MODEL = "gemini-2.5-flash"
 
 
 GEMINI_PROMPT = """
@@ -30,10 +28,20 @@ PRICE DETECTION RULES:
 - If you cannot identify the product → set is_product = false
 
 IMPULSE vs NECESSITY:
-- IMPULSE: wants, not needs — gadgets, fashion, extra appliances, decorations,
-  collectibles, accessories, luxury items, duplicate items user likely already owns
+- IMPULSE: wants not needs — gadgets (unless first-time essential), 
+  fashion, extra appliances, decorations, collectibles, accessories, 
+  luxury items, duplicate items user likely already owns,
+  upgraded versions of working items user already has
+
 - NECESSITY: food, medicine, basic household items, school/work supplies,
-  first-time essential appliances
+  first-time essential appliances, items critical for work or study
+
+- CONTEXT CLUES for borderline items:
+  * Price significantly above market average → lean impulse
+  * Basic/generic version of product → lean necessity  
+  * Premium/branded/limited edition version → lean impulse
+  * If genuinely unclear → classify as NECESSITY and add
+    note: "This could go either way — make sure you really need it"
 
 COACH MESSAGE RULES:
 - Only write if is_impulse = true
@@ -92,12 +100,34 @@ async def analyze_image(image_base64: str) -> dict:
     Falls back gracefully if Gemini fails or returns bad JSON.
     """
     try:
-        image_bytes = base64.b64decode(image_base64)
-        image = Image.open(io.BytesIO(image_bytes))
+        # Strip data URL prefix if present (e.g. data:image/jpeg;base64,...)
+        if "," in image_base64:
+            image_base64 = image_base64.split(",")[1]
 
-        response = model.generate_content([GEMINI_PROMPT, image])
+        image_bytes = base64.b64decode(image_base64)
+
+        # Detect MIME type from the first bytes
+        if image_bytes[:4] == b'\x89PNG':
+            mime = "image/png"
+        elif image_bytes[:2] == b'\xff\xd8':
+            mime = "image/jpeg"
+        elif image_bytes[:4] == b'RIFF':
+            mime = "image/webp"
+        else:
+            mime = "image/jpeg"  # default fallback
+
+        print(f"[Gemini] Image size: {len(image_bytes)} bytes, MIME: {mime}")
+
+        # Build image part for the new google.genai SDK
+        image_part = genai.types.Part.from_bytes(data=image_bytes, mime_type=mime)
+
+        response = client.models.generate_content(
+            model=MODEL,
+            contents=[GEMINI_PROMPT, image_part],
+        )
 
         raw = response.text.strip()
+        print(f"[Gemini] Raw response (first 500 chars): {raw[:500]}")
 
         # Strip markdown code fences if Gemini wraps in ```json ... ```
         if "```" in raw:
@@ -107,9 +137,14 @@ async def analyze_image(image_base64: str) -> dict:
             raw = raw.strip()
 
         result = json.loads(raw)
+        print(f"[Gemini] Parsed successfully — item: {result.get('item_name')}")
         return result
 
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        print(f"[Gemini] JSON Decode Error: {e}")
+        if 'raw' in locals():
+            print(f"[Gemini] Raw output was: {raw}")
         return FALLBACK_RESPONSE
-    except Exception:
+    except Exception as e:
+        print(f"[Gemini] Analysis Error: {type(e).__name__}: {e}")
         return FALLBACK_RESPONSE

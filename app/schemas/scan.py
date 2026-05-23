@@ -40,3 +40,6 @@ class ScanResponse(BaseModel):
     real_life_equivalents: list[RealLifeEquivalent] = []
     investment_projections: list[InvestmentProjection] = []
     alternatives: list[Alternative] = []
+    is_duplicate: Optional[bool] = False
+    last_bought_days_ago: Optional[int] = None
+    duplicate_warning: Optional[str] = None

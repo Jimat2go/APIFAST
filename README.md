@@ -15,7 +15,7 @@ On Windows (Command Prompt)
 On macOS/Linux
 source Jimatgo/bin/activate
 
-### 5. Set Up PostgreSQL Database
+Set Up PostgreSQL Database
 
 Create a new PostgreSQL database for the application:
 

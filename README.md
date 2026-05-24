@@ -2,6 +2,9 @@
 for setup the python environment
 python -m venv Jimatgo
 
+install all dependecies
+pip install requirement.txt
+
 for mac 
 python3 -m venv Jimatgo
 
@@ -35,7 +38,7 @@ JWT Configuration
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=10080
 
-API Keys (Get these from their respective services)
+API Keys (own api keyss)
 GEMINI_API_KEY=your-gemini-api-key
 SERPAPI_API_KEY=your-serpapi-api-key
 
